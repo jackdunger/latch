@@ -1,0 +1,71 @@
+#!/usr/bin/env python
+
+import argparse
+import os
+import getpass
+
+def run_macro(infile, env, time = '11:59:59', tag_num = None, output_dir = None, email_to=None):
+
+	USER = getpass.getuser()
+        #Write the shell script to submit to the batch
+	mac_name = infile.split('.',1)[0]
+	name = mac_name
+        if tag_num is not None:
+                name += '_' + str(tag_num)
+
+	rootfile = name + '.root'
+	
+	currentpath = os.getcwd()
+	
+	batch_output =  '/data/snoplus/%s/batch_output' %(USER)
+	if not os.path.isdir(batch_output):
+		os.mkdir(batch_output)
+        
+        if output_dir is not None:
+                batch_output = output_dir
+
+        output_dir = os.path.join(batch_output, name)
+
+	if not os.path.exists(output_dir):
+		os.mkdir(output_dir)
+	 
+	with open(os.path.join(output_dir, name + '.sh'),'w') as g:
+	
+		g.write(''' 
+#!/bin/bash
+cd %s
+module load gcc
+source %s
+cp %s/%s.mac .
+rat %s.mac
+mv *.root %s
+%s
+echo done
+''' %(output_dir, os.path.abspath(env), currentpath, mac_name, mac_name, rootfile, 'mutt -a *.log -s "{0}" Complete'.format(mac_name) if email_to is not None else ''))
+
+        #Send to the batch
+	if time == "testing":
+		batch_cmd = 'qsub -q testing  %s/%s/%s.sh'%(batch_output, name, name)
+		
+	
+	else:		
+		batch_cmd = 'qsub -l cput=%s %s/%s/%s.sh'%(str(time), batch_output, name, name)
+	os.system(batch_cmd)               
+        
+parser = argparse.ArgumentParser()
+parser.add_argument("filename", type=str)
+parser.add_argument("--env", type=str, default = "/home/dunger/Tgitrat.sh")
+parser.add_argument("--time", type=str, default="11:59:59")
+parser.add_argument("--reps", type=int, default=1)
+parser.add_argument("--startat", type=int, default=0)
+parser.add_argument("--outdir", type=str, default=None)
+parser.add_argument("--email_to", type=str, default=None)
+
+args = parser.parse_args()
+
+try:
+    for i in xrange(args.reps):
+        run_macro(args.filename, env = args.env, time=args.time, tag_num= i + args.startat, output_dir=args.outdir, email_to = args.email_to)
+
+except TypeError:
+    run_macro(args.filename, args.env, args.time, args.outdir)

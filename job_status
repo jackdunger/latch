@@ -1,0 +1,10 @@
+#!/bin/bash
+
+status(){
+    echo "Total jobs: $(expr $(qstat -u dunger | wc -l) - 5)"
+    echo "Running jobs: $(expr $(qstat -u dunger | grep ' R ' |wc -l))"
+    echo "Queued jobs: $(expr $(qstat -u dunger | grep ' Q ' | wc -l))"
+    qstat -u dunger
+}
+
+status

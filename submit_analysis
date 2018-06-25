@@ -1,0 +1,66 @@
+#!/bin/env python
+import os
+import subprocess
+import errno
+
+
+compile_command = '''source {env_file} && cd {working_dir}  && g++ -std=c++0x -O2 -Wall {source_file} $(root-config --cflags --glibs) -o  {exc_name} -I/${{RATROOT}}/include -I/${{RATROOT}}/include/libpq -L/${{RATROOT}}/lib -I/home/dunger/mylib/ -lRATEvent_Linux
+'''
+
+shell_template='''
+source {env_file}
+cd {working_dir}
+./{exc_name}
+echo Job done
+'''
+
+def run_command(cmd):
+        print "$ " + cmd
+        return subprocess.check_call(cmd, shell = True)
+
+def submit_job(source_file, env_file, sub_command, compile_only, working_dir):
+        # first create a directory for the job
+        base_name = os.path.splitext(os.path.basename(source_file))[0]
+        job_dir = os.path.abspath(os.path.join(working_dir, base_name) + "_sub")
+        try:
+                os.makedirs(job_dir)
+        except OSError as e:
+                if e.errno != errno.EEXIST:
+                        raise
+
+        # put the relevant parameters into a dict
+        env_params = {"env_file" : env_file,
+                      "source_file" : os.path.abspath(source_file), 
+                      "exc_name"   : base_name,
+                      "working_dir" : job_dir
+                      }
+
+        # then compile the script
+        try:
+                run_command(compile_command.format(**env_params))
+        except subprocess.CalledProcessError:
+                print "Compilation failed!"
+                return
+
+        if compile_only is True:
+                return
+
+        # then write a shell script
+        shell_path = os.path.join(job_dir, base_name + ".sh")
+        with open(shell_path, "w") as f:
+                f.write(shell_template.format(**env_params))
+        
+        # then submit the job
+        run_command("{0} {1}".format(sub_command, shell_path))
+
+if __name__ == "__main__":
+        from argparse import ArgumentParser
+        parser = ArgumentParser()
+        parser.add_argument("source_file", type=str)
+        parser.add_argument("env_file", type=str)
+        parser.add_argument("--sub_command", type=str, default="qsub -l cput=01:59:59")
+        parser.add_argument("--compile_only", action="store_true")
+        parser.add_argument("--working_dir", type=str, default = ".")
+
+        args = parser.parse_args()
+        submit_job(args.source_file, args.env_file, args.sub_command, args.compile_only, args.working_dir)
